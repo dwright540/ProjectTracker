@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CDS Project Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">PT</span>
+      <div>
+        <h1>Project Tracker</h1>
+        <p class="sub">My work at CDS</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="exportBtn" title="Download a backup of all projects">Export</button>
+      <label class="btn" title="Restore projects from a backup file">
+        Import<input type="file" id="importFile" accept="application/json" hidden>
+      </label>
+      <button class="btn primary" id="newProjectBtn">+ New project</button>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Views">
+    <button data-view="projects" class="active">Projects</button>
+    <button data-view="timelog">Time log</button>
+  </nav>
+
+  <main>
+   <div id="projectsView">
+    <section class="stats" id="stats"></section>
+
+    <section class="toolbar">
+      <input type="search" id="search" placeholder="Search projects, tags, notes…">
+      <select id="filterStatus">
+        <option value="">All statuses</option>
+      </select>
+      <select id="filterPriority">
+        <option value="">All priorities</option>
+        <option>High</option><option>Medium</option><option>Low</option>
+      </select>
+      <select id="sortBy">
+        <option value="updated">Recently updated</option>
+        <option value="due">Due date</option>
+        <option value="priority">Priority</option>
+        <option value="progress">Progress</option>
+        <option value="time">Hours logged</option>
+        <option value="name">Name</option>
+      </select>
+      <label class="check"><input type="checkbox" id="hideDone"> Hide completed</label>
+    </section>
+
+    <section id="projectList" class="grid"></section>
+    <p id="empty" class="empty" hidden>No projects yet. Click <strong>+ New project</strong> to add your first one.</p>
+   </div>
+
+   <div id="timelogView" hidden>
+    <section class="log-entry">
+      <h2>Log hours</h2>
+      <p class="sub">Enter how long you worked on a project for a given day.</p>
+      <div id="quickTimeSlot"></div>
+    </section>
+    <section class="toolbar">
+      <h2 class="grow">Days logged</h2>
+      <select id="logRange" aria-label="Period">
+        <option value="week">This week</option>
+        <option value="lastweek">Last week</option>
+        <option value="month">This month</option>
+        <option value="all">All time</option>
+      </select>
+    </section>
+    <div id="timeLogBody"></div>
+   </div>
+  </main>
+
+  <!-- Project editor -->
+  <dialog id="projectDialog">
+    <form id="projectForm" method="dialog">
+      <h2 id="dialogTitle">New project</h2>
+      <div class="form-grid">
+        <label class="span2">Project name<input name="name" required maxlength="120"></label>
+        <label class="span2">Description<textarea name="description" rows="3"></textarea></label>
+        <label>Status<select name="status"></select></label>
+        <label>Priority
+          <select name="priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+        </label>
+        <label>Start date<input type="date" name="startDate"></label>
+        <label>Due date<input type="date" name="dueDate"></label>
+        <label>Department / area<input name="area" placeholder="e.g. IT, Operations"></label>
+        <label>Tags<input name="tags" placeholder="comma, separated"></label>
+        <label>Estimated total hours<input type="number" name="estimateHours" min="0" step="0.5" placeholder="e.g. 40"></label>
+        <span></span>
+        <label class="span2">Manual progress (used when the project has no tasks)
+          <input type="range" name="progress" min="0" max="100" step="5" value="0">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="deleteProjectBtn" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Project detail -->
+  <dialog id="detailDialog" class="wide">
+    <div id="detailBody"></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
