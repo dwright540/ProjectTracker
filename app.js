@@ -23,13 +23,15 @@
   // ---------- cloud sync (Supabase) ----------
   // Fill these in from Supabase → Project Settings → API. Use the anon (public) key only —
   // never the service_role key. Leave the placeholders in place to run in browser-only mode.
-  const SUPABASE_URL = "https://ovxdvknrhupmbnaymbdq.supabase.co/rest/v1/";
+  const SUPABASE_URL = "https://ovxdvknrhupmbnaymbdq.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_nZ27EAqxaJIBFNRuAQ49ZQ_K8KyfVaT";
   const TABLE = "projects";
 
   const cloudConfigured = !SUPABASE_URL.startsWith("<") && !SUPABASE_ANON_KEY.startsWith("<");
   const sb = cloudConfigured && window.supabase
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+    // use the base project URL only (strip a pasted /rest/v1 or trailing slash)
+    ? window.supabase.createClient(SUPABASE_URL.trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, ""), SUPABASE_ANON_KEY)
+    : null;
   let user = null;                   // signed-in Supabase user; null = browser-only mode
   const pendingUpserts = new Set();  // project ids changed but not yet saved to Supabase
   const pendingDeletes = new Set();  // project ids deleted but not yet removed from Supabase
