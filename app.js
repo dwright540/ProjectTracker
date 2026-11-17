@@ -146,9 +146,11 @@
         off: `<span class="sync-status" title="Add your Supabase URL and anon key in app.js to turn on cloud sync">Saved in this browser only</span>`,
         broken: `<span class="sync-status warn" title="Check your internet connection or the Supabase script tag in index.html">Cloud sync unavailable (Supabase didn't load)</span>`,
         out: `<form class="auth-form" id="signInForm">
-                <input type="email" name="email" required placeholder="you@example.com" aria-label="Email for sign-in link">
-                <button class="btn small">Email me a sign-in link</button>
+                <input type="email" name="email" required placeholder="Email" autocomplete="username" aria-label="Email">
+                <input type="password" name="password" required placeholder="Password" autocomplete="current-password" aria-label="Password">
+                <button class="btn small primary">Sign in</button>
               </form>
+              <button class="btn link" data-auth="link" type="button" title="Sends a one-time sign-in link instead (limited to a few emails per hour)">Email me a link instead</button>
               <span class="sync-status">Browser only — sign in to sync</span>`,
         in: `<span class="sync-status" id="syncStatus"></span>
              <button class="btn small" data-auth="signout" type="button">Sign out</button>`,
@@ -678,26 +680,42 @@
   });
 
   // sign-in / sync controls
+  // Password sign-in (no email sent, so no rate limit).
   $("#authBox").addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (e.target.id !== "signInForm" || !sb) return;
+    const f = e.target;
+    if (f.id !== "signInForm" || !sb) return;
+    const btn = f.querySelector("button");
+    btn.disabled = true; btn.textContent = "Signing in…";
+    const { error } = await sb.auth.signInWithPassword({ email: f.email.value.trim(), password: f.password.value });
+    if (!f.isConnected) return; // signed in: the form was replaced
+    btn.disabled = false; btn.textContent = "Sign in";
+    if (error) {
+      f.password.value = "";
+      f.password.focus();
+      alert("Couldn't sign in: " + (/invalid login/i.test(error.message)
+        ? "the email or password is wrong." : error.message));
+    }
+  });
+  // Optional: one-time email link (Supabase's built-in email allows only a few per hour).
+  async function sendSignInLink() {
+    const input = $("#signInForm [name=email]");
+    const email = input.value.trim();
+    if (!email || !input.checkValidity()) { input.reportValidity(); input.focus(); return; }
     if (location.protocol === "file:") {
-      alert("Sign-in links can't open a file on your computer.\n\nOpen the tracker from its web address (GitHub Pages, or a local server such as `npx serve`) and sign in from there.");
+      alert("Sign-in links can't open a file on your computer.\n\nOpen the tracker from its web address (GitHub Pages, or a local server such as `npx serve`), or sign in with your password.");
       return;
     }
-    const email = e.target.email.value.trim();
-    const btn = e.target.querySelector("button");
-    btn.disabled = true;
     const { error } = await sb.auth.signInWithOtp({
-      email, options: { emailRedirectTo: location.origin + location.pathname },
+      email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false },
     });
-    btn.disabled = false;
     alert(error ? "Couldn't send the sign-in link: " + error.message
       : `A sign-in link was sent to ${email}. Open it in this browser.`);
-  });
+  }
   $("#authBox").addEventListener("click", async (e) => {
     const act = e.target.dataset.auth;
-    if (act === "retry") sync();
+    if (act === "link") sendSignInLink();
+    else if (act === "retry") sync();
     else if (act === "signout") {
       const n = pendingUpserts.size + pendingDeletes.size;
       if (n && !confirm(`${n} change(s) haven't reached Supabase yet and will be lost if you sign out. Sign out anyway?`)) return;

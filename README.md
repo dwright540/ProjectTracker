@@ -31,13 +31,17 @@ show up on every computer you sign in from. Check with IT before storing CDS wor
 3. In **Project Settings → API**, copy the **Project URL** and the **anon / public** key. Paste them over
    `<SUPABASE_URL>` and `<SUPABASE_ANON_KEY>` at the top of `app.js`.
    Never use the `service_role` key here — it bypasses all security.
-4. In **Authentication → URL Configuration**, set the **Site URL** (and add to **Redirect URLs**) the address
-   you open the tracker from, e.g. your GitHub Pages URL and/or `http://localhost:3000`.
-5. Open the tracker from that address (sign-in links don't work with a file opened from disk; for local use
-   run `npx serve` in this folder), enter your email, and click the link you receive.
-6. The first time you sign in, the tracker offers to copy any projects already saved in that browser.
-7. Recommended: after your first sign-in, turn off **Authentication → Sign In / Providers → Allow new users
-   to sign up**, so nobody else can create accounts on your project.
+4. Create your login: **Authentication → Users → Add user → Create new user**. Enter your email and a
+   password, and tick **Auto Confirm User**.
+5. Turn off **Authentication → Sign In / Providers → Allow new users to sign up**, so nobody else can create
+   accounts on your project.
+6. Open the tracker and sign in with that email and password. Password sign-in sends no email, so it isn't
+   affected by Supabase's email rate limit, and it also works when `index.html` is opened from disk.
+7. The first time you sign in, the tracker offers to copy any projects already saved in that browser.
+
+Optional email-link sign-in (**Email me a link instead**): Supabase's built-in email only allows a few emails
+per hour. For links to work, set **Authentication → URL Configuration → Site URL / Redirect URLs** to the
+address you open the tracker from (e.g. your GitHub Pages URL), and open the tracker from that address.
 
 Notes:
 - The header shows the sync status. Changes made while offline are retried automatically when you're back

@@ -49,11 +49,13 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 /* cloud sync / sign-in */
 .auth { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .auth-form { display: flex; gap: 6px; }
-.auth-form input { width: 210px; padding: 4px 8px; font-size: .85rem; }
+.auth-form input { width: 170px; padding: 4px 8px; font-size: .85rem; }
+.auth > .btn.link { color: var(--accent); font-size: .8rem; padding: 0; }
+.auth > .btn.link:hover { color: var(--accent); text-decoration: underline; }
 .sync-status { color: var(--muted); font-size: .82rem; }
 .sync-status.warn { color: var(--danger); }
 .sync-status .btn.link { color: var(--accent); padding: 0; font-size: inherit; text-decoration: underline; }
-@media (max-width: 640px) { .auth-form, .auth-form input { width: 100%; } .auth { width: 100%; } }
+@media (max-width: 640px) { .auth-form, .auth-form input { width: 100%; } .auth-form { flex-wrap: wrap; } .auth { width: 100%; } }
 
 main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 60px; }
 
