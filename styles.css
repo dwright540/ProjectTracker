@@ -44,7 +44,16 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 }
 .brand h1 { font-size: 1.15rem; }
 .sub { margin: 0; color: var(--muted); font-size: .85rem; }
-.top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* cloud sync / sign-in */
+.auth { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.auth-form { display: flex; gap: 6px; }
+.auth-form input { width: 210px; padding: 4px 8px; font-size: .85rem; }
+.sync-status { color: var(--muted); font-size: .82rem; }
+.sync-status.warn { color: var(--danger); }
+.sync-status .btn.link { color: var(--accent); padding: 0; font-size: inherit; text-decoration: underline; }
+@media (max-width: 640px) { .auth-form, .auth-form input { width: 100%; } .auth { width: 100%; } }
 
 main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 60px; }
 

@@ -17,6 +17,32 @@ No build step or server is needed. Open `index.html` in a browser, or host it wi
 (Settings → Pages → Deploy from branch → `main` / root).
 
 ## Where data is stored
-Data is saved in your browser's `localStorage`. It stays on your machine and is **not** uploaded anywhere,
-including GitHub. Each browser/computer keeps its own copy, so use **Export** regularly to back up, and
-**Import** to move your data to another machine.
+By default, data is saved in your browser's `localStorage`. It stays on your machine and is **not** uploaded
+anywhere, including GitHub. Each browser/computer keeps its own copy, so use **Export** regularly to back up,
+and **Import** to move your data to another machine.
+
+If you turn on **cloud sync** (below), your projects are also stored in your own Supabase database so they
+show up on every computer you sign in from. Check with IT before storing CDS work data in an outside service.
+
+## Cloud sync with Supabase (optional, free plan)
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In **SQL Editor**, run [`supabase-setup.sql`](supabase-setup.sql). It creates the `projects` table and the
+   Row Level Security rule that keeps your rows private.
+3. In **Project Settings → API**, copy the **Project URL** and the **anon / public** key. Paste them over
+   `<SUPABASE_URL>` and `<SUPABASE_ANON_KEY>` at the top of `app.js`.
+   Never use the `service_role` key here — it bypasses all security.
+4. In **Authentication → URL Configuration**, set the **Site URL** (and add to **Redirect URLs**) the address
+   you open the tracker from, e.g. your GitHub Pages URL and/or `http://localhost:3000`.
+5. Open the tracker from that address (sign-in links don't work with a file opened from disk; for local use
+   run `npx serve` in this folder), enter your email, and click the link you receive.
+6. The first time you sign in, the tracker offers to copy any projects already saved in that browser.
+7. Recommended: after your first sign-in, turn off **Authentication → Sign In / Providers → Allow new users
+   to sign up**, so nobody else can create accounts on your project.
+
+Notes:
+- The header shows the sync status. Changes made while offline are retried automatically when you're back
+  online, or with **Retry**. You'll be warned before closing the page with unsynced changes.
+- If you edit in two places at once, the last save wins.
+- Free Supabase projects pause after about a week of no use. Restore it from the Supabase dashboard; nothing
+  is lost. Keep using **Export** as a backup.
+- Leaving the placeholders in `app.js` keeps the app in browser-only mode, exactly as before.

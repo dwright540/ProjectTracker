@@ -16,6 +16,7 @@
       </div>
     </div>
     <div class="top-actions">
+      <div id="authBox" class="auth" aria-live="polite"></div>
       <button class="btn" id="exportBtn" title="Download a backup of all projects">Export</button>
       <label class="btn" title="Restore projects from a backup file">
         Import<input type="file" id="importFile" accept="application/json" hidden>
@@ -111,6 +112,8 @@
     <div id="detailBody"></div>
   </dialog>
 
+  <!-- Supabase client for cloud sync (set your URL and anon key at the top of app.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

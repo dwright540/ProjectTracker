@@ -20,22 +20,146 @@
   const statusColor = (name) => (STATUSES.find((s) => s.name === name) || STATUSES[0]).color;
   const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
 
+  // ---------- cloud sync (Supabase) ----------
+  // Fill these in from Supabase → Project Settings → API. Use the anon (public) key only —
+  // never the service_role key. Leave the placeholders in place to run in browser-only mode.
+  const SUPABASE_URL = "https://ovxdvknrhupmbnaymbdq.supabase.co/rest/v1/";
+  const SUPABASE_ANON_KEY = "sb_publishable_nZ27EAqxaJIBFNRuAQ49ZQ_K8KyfVaT";
+  const TABLE = "projects";
+
+  const cloudConfigured = !SUPABASE_URL.startsWith("<") && !SUPABASE_ANON_KEY.startsWith("<");
+  const sb = cloudConfigured && window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+  let user = null;                   // signed-in Supabase user; null = browser-only mode
+  const pendingUpserts = new Set();  // project ids changed but not yet saved to Supabase
+  const pendingDeletes = new Set();  // project ids deleted but not yet removed from Supabase
+  let syncing = false, syncAgain = false, syncError = "";
+
+  // Browser-only data keeps its original key; cloud data is cached separately per user,
+  // so signing in or out never overwrites the other copy.
+  const cacheKey = () => user ? `${STORAGE_KEY}:cloud:${user.id}` : STORAGE_KEY;
+
   // ---------- storage ----------
   let projects = load();
   let currentId = null;
 
-  function load() {
+  function load(key = STORAGE_KEY) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(key);
       const data = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(data)) return [];
       data.forEach((p) => { delete p.timerStart; }); // timer feature removed
       return data;
     } catch { return []; }
   }
-  function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)); }
+  function writeCache() {
+    try { localStorage.setItem(cacheKey(), JSON.stringify(projects)); }
     catch (e) { alert("Could not save to browser storage: " + e.message); }
+  }
+  // Save locally, and queue the given changed projects for upload when signed in.
+  function save(...changed) {
+    writeCache();
+    if (!user) return;
+    changed.forEach((p) => { pendingUpserts.add(p.id); pendingDeletes.delete(p.id); });
+    sync();
+  }
+  function markDeleted(id) {
+    if (!user) return;
+    pendingDeletes.add(id);
+    pendingUpserts.delete(id);
+  }
+
+  async function sync() {
+    if (!user) return;
+    if (syncing) { syncAgain = true; return; }
+    syncing = true; syncError = ""; renderAuth();
+    let ups = [], dels = [];
+    try {
+      do {
+        syncAgain = false;
+        dels = [...pendingDeletes]; pendingDeletes.clear();
+        ups = [...pendingUpserts]; pendingUpserts.clear();
+        if (dels.length) {
+          const { error } = await sb.from(TABLE).delete().in("id", dels);
+          if (error) throw error;
+          dels = [];
+        }
+        const rows = ups.map(find).filter(Boolean).map((p) =>
+          ({ id: p.id, data: p, updated_at: p.updatedAt || new Date().toISOString() }));
+        if (rows.length) {
+          const { error } = await sb.from(TABLE).upsert(rows);
+          if (error) throw error;
+        }
+        ups = [];
+      } while (syncAgain || pendingUpserts.size || pendingDeletes.size);
+    } catch (e) {
+      // put unsent changes back in the queue (unless superseded) so they retry later
+      ups.forEach((id) => { if (!pendingDeletes.has(id)) pendingUpserts.add(id); });
+      dels.forEach((id) => { if (!pendingUpserts.has(id)) pendingDeletes.add(id); });
+      syncError = (e && e.message) || String(e);
+    } finally {
+      syncing = false; renderAuth();
+    }
+  }
+
+  async function loadCloud() {
+    projects = load(cacheKey()); // show the last cached copy straight away
+    render();
+    const { data, error } = await sb.from(TABLE).select("data");
+    if (!user) return; // signed out while loading
+    if (error) { syncError = "Couldn't load from Supabase: " + error.message; renderAuth(); return; }
+    projects = data.map((r) => r.data).filter((p) => p && p.id);
+    writeCache();
+    offerLocalUpload();
+    render();
+  }
+
+  // The first time you sign in on a browser, offer to copy browser-only projects to Supabase.
+  function offerLocalUpload() {
+    const flag = `${STORAGE_KEY}:offered-upload:${user.id}`;
+    try { if (localStorage.getItem(flag)) return; localStorage.setItem(flag, "1"); } catch { return; }
+    const missing = load(STORAGE_KEY).filter((p) => p && p.id && !find(p.id));
+    if (!missing.length) return;
+    if (!confirm(`${missing.length} project(s) are saved only in this browser.\n\nCopy them to your Supabase account?`)) return;
+    projects.push(...missing);
+    save(...missing);
+  }
+
+  async function switchUser(next) {
+    user = next;
+    pendingUpserts.clear(); pendingDeletes.clear(); syncError = "";
+    if (detail.open) detail.close();
+    if (dlg.open) dlg.close();
+    renderAuth();
+    if (user) await loadCloud();
+    else { projects = load(STORAGE_KEY); render(); }
+  }
+
+  function renderAuth() {
+    const box = $("#authBox");
+    const mode = !cloudConfigured ? "off" : !sb ? "broken" : user ? "in" : "out";
+    if (box.dataset.mode !== mode) {
+      box.dataset.mode = mode;
+      box.innerHTML = {
+        off: `<span class="sync-status" title="Add your Supabase URL and anon key in app.js to turn on cloud sync">Saved in this browser only</span>`,
+        broken: `<span class="sync-status warn" title="Check your internet connection or the Supabase script tag in index.html">Cloud sync unavailable (Supabase didn't load)</span>`,
+        out: `<form class="auth-form" id="signInForm">
+                <input type="email" name="email" required placeholder="you@example.com" aria-label="Email for sign-in link">
+                <button class="btn small">Email me a sign-in link</button>
+              </form>
+              <span class="sync-status">Browser only — sign in to sync</span>`,
+        in: `<span class="sync-status" id="syncStatus"></span>
+             <button class="btn small" data-auth="signout" type="button">Sign out</button>`,
+      }[mode];
+    }
+    if (mode !== "in") return;
+    const n = pendingUpserts.size + pendingDeletes.size;
+    const s = $("#syncStatus");
+    s.className = "sync-status" + (syncError ? " warn" : "");
+    s.title = syncError || `Signed in as ${user.email || ""}`;
+    s.innerHTML = syncing ? "Saving…"
+      : syncError ? `Not synced${n ? ` (${n} change${n === 1 ? "" : "s"})` : ""} · <button class="btn link" data-auth="retry" type="button">Retry</button>`
+      : `✓ Synced · ${esc(user.email || "")}`;
   }
   const find = (id) => projects.find((p) => p.id === id);
   const touch = (p) => { p.updatedAt = new Date().toISOString(); };
@@ -108,7 +232,7 @@
     const minutes = Math.round(Number(f.hours.value) * 60);
     if (!p || !f.date.value || !(minutes > 0)) { alert("Enter a date and the hours you worked."); return false; }
     addTime(p, f.date.value, minutes, f.note.value.trim());
-    touch(p); save();
+    touch(p); save(p);
     return true;
   }
 
@@ -118,7 +242,7 @@
     if (!t || !confirm(`Remove ${fmtHrs(t.minutes)} logged on ${fmtDate(t.date)} for "${p.name}"?`)) return;
     p.time = p.time.filter((x) => x.id !== timeId);
     addLog(p, `Removed ${fmtHrs(t.minutes)} logged for ${fmtDate(t.date)}`, true);
-    touch(p); save(); render();
+    touch(p); save(p); render();
     if (currentId === p.id) renderDetail();
   }
 
@@ -315,7 +439,7 @@
       addLog(p, "Project created", true);
       projects.push(p);
     }
-    touch(p); save(); dlg.close(); render();
+    touch(p); save(p); dlg.close(); render();
     if (currentId === p.id) renderDetail();
   });
 
@@ -324,6 +448,7 @@
     const p = find(form.dataset.id);
     if (!p || !confirm(`Permanently delete "${p.name}" and all its tasks and notes?`)) return;
     projects = projects.filter((x) => x.id !== p.id);
+    markDeleted(p.id);
     save(); dlg.close();
     if (currentId === p.id) { detail.close(); currentId = null; }
     render();
@@ -437,14 +562,14 @@
       const task = p.tasks.find((x) => x.id === t.dataset.task);
       task.done = t.checked;
       if (task.done) addLog(p, `Completed task: ${task.text}`, true);
-      touch(p); save(); renderDetail(); render();
+      touch(p); save(p); renderDetail(); render();
     } else if (t.dataset.deltask) {
       p.tasks = p.tasks.filter((x) => x.id !== t.dataset.deltask);
-      touch(p); save(); renderDetail(); render();
+      touch(p); save(p); renderDetail(); render();
     } else if (t.dataset.dellog) {
       if (!confirm("Remove this log entry?")) return;
       p.log = p.log.filter((x) => x.id !== t.dataset.dellog);
-      touch(p); save(); renderDetail(); render();
+      touch(p); save(p); renderDetail(); render();
     }
   });
 
@@ -463,7 +588,7 @@
     } else if (e.target.id === "logForm") {
       addLog(p, text);
     }
-    touch(p); save(); renderDetail(); render();
+    touch(p); save(p); renderDetail(); render();
     const again = $("#" + e.target.id + " [name=text]");
     if (again) again.focus();
   });
@@ -487,16 +612,21 @@
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      const incoming = Array.isArray(data) ? data : data.projects;
-      if (!Array.isArray(incoming)) throw new Error("No projects found in file.");
+      const list = Array.isArray(data) ? data : data.projects;
+      if (!Array.isArray(list)) throw new Error("No projects found in file.");
+      const incoming = list.filter((p) => p && typeof p === "object" && p.id); // every project needs an id
+      if (!incoming.length) throw new Error("No projects with an id found in file.");
       const replace = confirm(
         `Found ${incoming.length} project(s).\n\nOK = REPLACE all current projects (${projects.length}) with the file.\nCancel = MERGE (add/update by ID, keep everything else).`);
-      if (replace) projects = incoming;
-      else incoming.forEach((p) => {
+      if (replace) {
+        const keep = new Set(incoming.map((p) => p.id));
+        projects.forEach((p) => { if (!keep.has(p.id)) markDeleted(p.id); });
+        projects = incoming;
+      } else incoming.forEach((p) => {
         const i = projects.findIndex((x) => x.id === p.id);
         if (i >= 0) projects[i] = p; else projects.push(p);
       });
-      save(); render();
+      save(...incoming); render();
     } catch (err) { alert("Import failed: " + err.message); }
   });
 
@@ -545,7 +675,49 @@
     else if (t.dataset.open) { e.preventDefault(); openDetail(t.dataset.open); }
   });
 
+  // sign-in / sync controls
+  $("#authBox").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (e.target.id !== "signInForm" || !sb) return;
+    if (location.protocol === "file:") {
+      alert("Sign-in links can't open a file on your computer.\n\nOpen the tracker from its web address (GitHub Pages, or a local server such as `npx serve`) and sign in from there.");
+      return;
+    }
+    const email = e.target.email.value.trim();
+    const btn = e.target.querySelector("button");
+    btn.disabled = true;
+    const { error } = await sb.auth.signInWithOtp({
+      email, options: { emailRedirectTo: location.origin + location.pathname },
+    });
+    btn.disabled = false;
+    alert(error ? "Couldn't send the sign-in link: " + error.message
+      : `A sign-in link was sent to ${email}. Open it in this browser.`);
+  });
+  $("#authBox").addEventListener("click", async (e) => {
+    const act = e.target.dataset.auth;
+    if (act === "retry") sync();
+    else if (act === "signout") {
+      const n = pendingUpserts.size + pendingDeletes.size;
+      if (n && !confirm(`${n} change(s) haven't reached Supabase yet and will be lost if you sign out. Sign out anyway?`)) return;
+      await sb.auth.signOut();
+    }
+  });
+  window.addEventListener("online", () => { if (user) sync(); });
+  window.addEventListener("beforeunload", (e) => {
+    if (user && (syncing || pendingUpserts.size || pendingDeletes.size)) e.preventDefault();
+  });
+
   let startView = "projects";
   try { startView = localStorage.getItem(STORAGE_KEY + ":view") === "timelog" ? "timelog" : "projects"; } catch {}
   showView(startView);
+  renderAuth();
+
+  if (sb) {
+    sb.auth.onAuthStateChange((_event, session) => {
+      const next = session ? session.user : null;
+      if ((next && next.id) === (user && user.id)) { if (next) user = next; renderAuth(); return; }
+      // defer: Supabase recommends not calling its API inside this callback
+      setTimeout(() => switchUser(next), 0);
+    });
+  }
 })();
